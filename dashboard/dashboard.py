@@ -690,6 +690,89 @@ with tab2:
         )
         download_button(bc_detail, "keramin_vs_brands.xlsx", "Скачать Excel")
 
+        st.divider()
+        st.subheader("Позиционирование конкурентов по материалу и формату")
+
+        threshold = st.slider(
+            "Порог «на уровне», %", 0, 30, 10, step=5,
+            help="Бренды в диапазоне ±N% от цены КЕРАМИН считаются «на уровне»",
+            key="pos_threshold",
+        )
+
+        # КЕРАМИН: средняя цена по материал × формат
+        keramin_fmt_price = (
+            dp_keramin.groupby(["material", "format"])["price"]
+            .mean()
+            .reset_index(name="керамин_цена")
+        )
+
+        # Конкуренты: SKU и средняя цена по материал × формат × группа × бренд-страна
+        bc_fmt = (
+            dp_market.groupby(["material", "format", "Группа", "brand_country"])
+            .agg(SKU=("price", "count"), Средняя_цена=("price", "mean"))
+            .round({"Средняя_цена": 0})
+            .reset_index()
+        )
+        bc_fmt["Средняя_цена"] = bc_fmt["Средняя_цена"].astype(int)
+
+        # Только форматы, где есть позиции КЕРАМИН
+        bc_fmt = bc_fmt.merge(keramin_fmt_price, on=["material", "format"], how="inner")
+        bc_fmt["vs КЕРАМИН, %"] = (
+            (bc_fmt["Средняя_цена"] - bc_fmt["керамин_цена"]) / bc_fmt["керамин_цена"] * 100
+        ).round(1)
+
+        def _classify(pct: float) -> str:
+            if pct < -threshold:
+                return "Дешевле"
+            elif pct > threshold:
+                return "Дороже"
+            return "На уровне"
+
+        bc_fmt["Позиция"] = bc_fmt["vs КЕРАМИН, %"].apply(_classify)
+        bc_fmt["керамин_цена"] = bc_fmt["керамин_цена"].round(0).astype(int)
+
+        grp_ord = {g: i for i, g in enumerate(COMP_ORDER)}
+        bc_fmt["_ord"] = bc_fmt["Группа"].map(grp_ord)
+        bc_fmt = (
+            bc_fmt.sort_values(["material", "format", "_ord", "Средняя_цена"])
+            .drop(columns=["_ord"])
+            .reset_index(drop=True)
+        )
+
+        pos_order = ["Дешевле", "На уровне", "Дороже"]
+        pos_counts = bc_fmt["Позиция"].value_counts().reindex(pos_order, fill_value=0)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Дешевле КЕРАМИН", pos_counts["Дешевле"])
+        c2.metric("На уровне",       pos_counts["На уровне"])
+        c3.metric("Дороже КЕРАМИН",  pos_counts["Дороже"])
+
+        sku_max2 = int(bc_fmt["SKU"].max())
+        st.dataframe(
+            bc_fmt.rename(columns={"material": "Материал", "format": "Формат",
+                                   "brand_country": "Бренд-страна",
+                                   "керамин_цена": "Цена КЕРАМИН"}),
+            use_container_width=True,
+            column_config={
+                "Материал":      st.column_config.TextColumn("Материал"),
+                "Формат":        st.column_config.TextColumn("Формат"),
+                "Группа":        st.column_config.TextColumn("Группа"),
+                "Бренд-страна":  st.column_config.TextColumn("Бренд-страна"),
+                "SKU": st.column_config.ProgressColumn(
+                    "SKU", min_value=0, max_value=sku_max2, format="%d"
+                ),
+                "Средняя_цена":  st.column_config.NumberColumn("Средняя цена", format="%d ₽"),
+                "Цена КЕРАМИН":  st.column_config.NumberColumn("Цена КЕРАМИН", format="%d ₽"),
+                "vs КЕРАМИН, %": st.column_config.NumberColumn("vs КЕРАМИН, %", format="%.1f%%"),
+                "Позиция":       st.column_config.TextColumn("Позиция"),
+            },
+        )
+        download_button(
+            bc_fmt.rename(columns={"material": "Материал", "format": "Формат",
+                                   "brand_country": "Бренд-страна",
+                                   "керамин_цена": "Цена КЕРАМИН"}),
+            "keramin_positioning.xlsx", "Скачать Excel",
+        )
+
 # ════════════════════════════════════════════════════════════════════════════
 # ТАБ 3 — СРЕДНЕВЗВЕШЕННАЯ ЦЕНА
 # ════════════════════════════════════════════════════════════════════════════
