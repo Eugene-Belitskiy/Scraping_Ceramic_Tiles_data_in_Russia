@@ -486,10 +486,7 @@ with tab2:
 
         st.divider()
 
-        # Конкурентный график строится по полному датасету (df),
-        # только с фильтром по форматам — чтобы все группы были видны
-        active_fmts = sorted(filtered["format"].dropna().unique())
-        dp = df[df["format"].isin(active_fmts) & df["price"].notna()].copy()
+        dp = filtered[filtered["price"].notna()].copy()
         dp["Группа"] = dp.apply(
             lambda r: _assign_comp_group(r["brand"], r["country"]), axis=1
         )
