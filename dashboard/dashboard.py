@@ -501,6 +501,39 @@ with tab2:
         fig.update_xaxes(tickangle=45)
         st.plotly_chart(fig, use_container_width=True)
 
+        st.divider()
+        st.subheader("Распределение цен по конкурентным группам")
+        hist_highlight = st.pills(
+            "Подсветить группы",
+            options=COMP_ORDER,
+            selection_mode="multi",
+            default=COMP_ORDER,
+            key="hist_highlight",
+        )
+        fig_hist = go.Figure()
+        bin_size = max(50, int((dp["price"].max() - dp["price"].min()) / 60))
+        for group in COMP_ORDER:
+            subset = dp[dp["Группа"] == group]
+            if len(subset) == 0:
+                continue
+            highlighted = (not hist_highlight) or (group in hist_highlight)
+            fig_hist.add_trace(go.Histogram(
+                x=subset["price"],
+                name=group,
+                opacity=0.75 if highlighted else 0.1,
+                marker_color=COMP_COLORS[group],
+                xbins=dict(size=bin_size),
+                hovertemplate=f"<b>{group}</b><br>Цена: %{{x}}<br>Позиций: %{{y}}<extra></extra>",
+            ))
+        fig_hist.update_layout(
+            barmode="overlay",
+            xaxis_title="Цена, руб/м²",
+            yaxis_title="Количество позиций",
+            legend_title="Группа",
+            height=420,
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+
         st.subheader("Все позиции КЕРАМИН на фоне рынка")
         fig3 = go.Figure()
         fig3.add_trace(go.Scatter(
