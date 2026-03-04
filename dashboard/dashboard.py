@@ -648,40 +648,47 @@ with tab2:
         st.caption("Нажмите на группу — увидите бренды внутри")
         st.plotly_chart(fig_tree, use_container_width=True)
 
-        st.subheader("Детализация: КЕРАМИН vs медиана рынка по форматам")
-        market_med_fmt = df_market.groupby("format")["price"].median().rename("медиана_рынка")
-        kd = df_keramin[["name","format","material","surface_type","primary_design",
-                         "primary_color","price","store","availability","url"]].copy()
-        kd = kd.merge(market_med_fmt, on="format", how="left")
-        kd["vs_рынок_%"] = ((kd["price"] - kd["медиана_рынка"]) / kd["медиана_рынка"] * 100).round(1)
+        st.subheader("Сравнение бренд-стран с КЕРАМИН")
+        keramin_avg = dp[dp["Группа"] == "КЕРАМИН"]["price"].mean()
 
-        # Медиана по каждой конкурентной группе × формат
-        comp_groups = [g for g in COMP_ORDER if g != "КЕРАМИН"]
-        for group in comp_groups:
-            grp_med = (
-                dp[dp["Группа"] == group]
-                .groupby("format")["price"]
-                .median()
-                .rename(f"_med_{group}")
+        bc_detail = (
+            dp.groupby(["Группа", "brand_country"])
+            .agg(
+                SKU=("price", "count"),
+                Средняя_цена=("price", "mean"),
             )
-            kd = kd.merge(grp_med, on="format", how="left")
-            col = f"vs {group}, %"
-            kd[col] = ((kd["price"] - kd[f"_med_{group}"]) / kd[f"_med_{group}"] * 100).round(1)
-            kd.drop(columns=[f"_med_{group}"], inplace=True)
+            .round({"Средняя_цена": 0})
+            .reset_index()
+        )
+        bc_detail["Средняя_цена"] = bc_detail["Средняя_цена"].astype(int)
+        bc_detail["vs КЕРАМИН, %"] = (
+            (bc_detail["Средняя_цена"] - keramin_avg) / keramin_avg * 100
+        ).round(1)
 
-        kd_out = kd.sort_values("vs_рынок_%").reset_index(drop=True)
-        col_config = {
-            "url": st.column_config.LinkColumn("Ссылка"),
-            "price": st.column_config.NumberColumn("Цена", format="%.0f ₽"),
-            "медиана_рынка": st.column_config.NumberColumn("Медиана рынка", format="%.0f ₽"),
-            "vs_рынок_%": st.column_config.NumberColumn("vs рынок, %", format="%.1f%%"),
-        }
-        for group in comp_groups:
-            col_config[f"vs {group}, %"] = st.column_config.NumberColumn(
-                f"vs {group}, %", format="%.1f%%"
-            )
-        st.dataframe(kd_out, use_container_width=True, column_config=col_config)
-        download_button(kd_out, "keramin_vs_market.xlsx", "Скачать Excel")
+        # Сортировка по порядку COMP_ORDER → внутри по цене
+        grp_order = {g: i for i, g in enumerate(COMP_ORDER)}
+        bc_detail["_ord"] = bc_detail["Группа"].map(grp_order)
+        bc_detail = (
+            bc_detail.sort_values(["_ord", "Средняя_цена"])
+            .drop(columns=["_ord"])
+            .reset_index(drop=True)
+        )
+
+        sku_max = int(bc_detail["SKU"].max())
+        st.dataframe(
+            bc_detail,
+            use_container_width=True,
+            column_config={
+                "Группа":        st.column_config.TextColumn("Группа"),
+                "brand_country": st.column_config.TextColumn("Бренд-страна"),
+                "SKU": st.column_config.ProgressColumn(
+                    "SKU", min_value=0, max_value=sku_max, format="%d"
+                ),
+                "Средняя_цена":  st.column_config.NumberColumn("Средняя цена", format="%d ₽"),
+                "vs КЕРАМИН, %": st.column_config.NumberColumn("vs КЕРАМИН, %", format="%.1f%%"),
+            },
+        )
+        download_button(bc_detail, "keramin_vs_brands.xlsx", "Скачать Excel")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ТАБ 3 — СРЕДНЕВЗВЕШЕННАЯ ЦЕНА
