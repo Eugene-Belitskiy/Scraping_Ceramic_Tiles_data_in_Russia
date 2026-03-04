@@ -535,23 +535,39 @@ with tab2:
         st.plotly_chart(fig_hist, use_container_width=True)
 
         st.subheader("Все позиции КЕРАМИН на фоне рынка")
+        dp_market  = dp[dp["Группа"] != "КЕРАМИН"]
+        dp_keramin = dp[dp["Группа"] == "КЕРАМИН"]
         fig3 = go.Figure()
+        for group in COMP_ORDER:
+            if group == "КЕРАМИН":
+                continue
+            subset = dp_market[dp_market["Группа"] == group]
+            if len(subset) == 0:
+                continue
+            fig3.add_trace(go.Scatter(
+                x=[group] * len(subset),
+                y=subset["price"],
+                mode="markers",
+                name=group,
+                marker=dict(color=COMP_COLORS[group], opacity=0.3, size=5),
+                hovertemplate=f"<b>{group}</b><br>Бренд: %{{customdata[0]}}<br>Цена: %{{y:.0f}} ₽<extra></extra>",
+                customdata=subset[["brand"]].values,
+                showlegend=True,
+            ))
         fig3.add_trace(go.Scatter(
-            x=df_market["format"], y=df_market["price"],
-            mode="markers", name="Рынок",
-            marker=dict(color=COLOR_MARKET, opacity=0.25, size=5),
-        ))
-        fig3.add_trace(go.Scatter(
-            x=df_keramin["format"], y=df_keramin["price"],
-            mode="markers", name="КЕРАМИН",
+            x=["КЕРАМИН"] * len(dp_keramin),
+            y=dp_keramin["price"],
+            mode="markers",
+            name="КЕРАМИН",
             marker=dict(color=COLOR_KERAMIN, size=10, symbol="diamond"),
-            text=df_keramin["name"],
+            text=dp_keramin["name"],
             hovertemplate="<b>%{text}</b><br>Цена: %{y:.0f} ₽<extra></extra>",
         ))
         fig3.update_layout(
-            title="Позиции КЕРАМИН vs рынок (по форматам)",
-            xaxis_title="Формат", yaxis_title="Цена, руб/м²",
-            xaxis={"categoryorder": "total ascending"},
+            xaxis_title="Конкурентная группа",
+            yaxis_title="Цена, руб/м²",
+            xaxis={"categoryorder": "array", "categoryarray": COMP_ORDER},
+            height=500,
         )
         st.plotly_chart(fig3, use_container_width=True)
 
