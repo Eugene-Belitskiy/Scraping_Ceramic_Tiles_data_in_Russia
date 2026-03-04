@@ -18,6 +18,14 @@ KERAMIN_BRAND    = "КЕРАМИН"
 STORES_WITH_STOCK = ["LemanaPRO", "OBI", "Petrovich"]
 COLOR_KERAMIN    = "#E63946"
 COLOR_MARKET     = "#457B9D"
+KEY_COUNTRIES    = [
+    "Азербайджан", "Беларусь", "Индия", "Иран",
+    "Казахстан", "Китай", "Кыргызстан", "Россия", "Узбекистан",
+]
+KEY_FORMATS      = [
+    "120x60", "60x60", "60x30", "40x40", "30x30",
+    "90x30", "40x25", "30x10", "25x5",
+]
 
 st.set_page_config(
     page_title="Рынок керамической плитки России",
@@ -66,57 +74,122 @@ st.caption(
     f"Дата обновления: {df['date'].max()}"
 )
 
+# ─── Session state и callbacks ───────────────────────────────────────────────
+
+_price_min_default = int(df["price"].min())
+for _k, _v in [("pr_lo", _price_min_default), ("pr_hi", 3000), ("disc_max", 30)]:
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+def _on_price_slider():
+    lo, hi = st.session_state["_price_slider"]
+    st.session_state.pr_lo = lo
+    st.session_state.pr_hi = hi
+
+def _on_disc_slider():
+    st.session_state.disc_max = st.session_state["_disc_slider"]
+
 # ─── Сайдбар — фильтры ──────────────────────────────────────────────────────
 
 with st.sidebar:
     st.header("Фильтры")
 
-    stores = st.multiselect(
-        "Магазин",
-        options=sorted(df["store"].dropna().unique()),
-        default=sorted(df["store"].dropna().unique()),
-    )
-    materials = st.multiselect(
-        "Материал",
-        options=sorted(df["material"].dropna().unique()),
-        default=sorted(df["material"].dropna().unique()),
-    )
-    surface_finishes = st.multiselect(
-        "Тип поверхности",
-        options=sorted(df["surface_finish"].dropna().replace("", pd.NA).dropna().unique()),
-        default=sorted(df["surface_finish"].dropna().replace("", pd.NA).dropna().unique()),
-    )
-    formats = st.multiselect(
-        "Формат",
-        options=sorted(df["format"].dropna().unique()),
-        placeholder="Все форматы",
-    )
+    st.markdown("**Магазин**")
+    store_counts = df["store"].value_counts()
+    stores = [
+        s for s in sorted(df["store"].dropna().unique())
+        if st.checkbox(f"{s}  ({store_counts.get(s, 0):,})", value=True, key=f"store_{s}")
+    ]
+
+    st.markdown("**Материал**")
+    material_counts = df["material"].value_counts()
+    materials = [
+        m for m in sorted(df["material"].dropna().unique())
+        if st.checkbox(f"{m}  ({material_counts.get(m, 0):,})", value=True, key=f"mat_{m}")
+    ]
+
+    st.markdown("**Тип поверхности**")
+    sf_opts = sorted(df["surface_finish"].dropna().replace("", pd.NA).dropna().unique())
+    sf_counts = df["surface_finish"].value_counts()
+    surface_finishes = [
+        s for s in sf_opts
+        if st.checkbox(f"{s}  ({sf_counts.get(s, 0):,})", value=True, key=f"sf_{s}")
+    ]
+    all_formats_list = sorted(df["format"].dropna().unique())
+    key_formats_only = st.checkbox("Только ключевые форматы", value=True)
+    if key_formats_only:
+        fmt_opts = [f for f in KEY_FORMATS if f in all_formats_list]
+        formats = st.pills(
+            "Формат", options=fmt_opts, selection_mode="multi", default=fmt_opts,
+            label_visibility="collapsed",
+        )
+    else:
+        formats = st.multiselect("Формат", options=all_formats_list, placeholder="Все форматы")
+
     designs = st.multiselect(
         "Дизайн",
         options=sorted(df["primary_design"].dropna().unique()),
         placeholder="Все дизайны",
     )
-    countries = st.multiselect(
-        "Страна производства",
-        options=sorted(df["country"].dropna().unique()),
-        default=sorted(df["country"].dropna().unique()),
-    )
 
-    price_min = int(df["price"].min())
-    price_max = int(df["price"].max())
-    price_range = st.slider(
-        "Цена, руб/м²",
-        min_value=price_min,
-        max_value=price_max,
-        value=(price_min, min(3500, price_max)),
-        step=100,
+    st.markdown("**Страна производства**")
+    country_mode = st.radio(
+        "", ["Ключевые страны", "Все страны"],
+        horizontal=True, key="country_mode", label_visibility="collapsed",
     )
-    max_discount = st.slider(
-        "Макс. скидка, %",
-        min_value=0, max_value=100, value=30, step=5,
-        help="Исключить товары со скидкой выше указанного значения. Товары без скидки всегда включаются.",
+    all_countries_list = sorted(df["country"].dropna().unique())
+    if country_mode == "Ключевые страны":
+        country_opts = [c for c in KEY_COUNTRIES if c in all_countries_list]
+        countries = st.pills(
+            "Страны", options=country_opts, selection_mode="multi", default=country_opts,
+            label_visibility="collapsed",
+        )
+    else:
+        countries = st.multiselect(
+            "Страна", options=all_countries_list, default=all_countries_list,
+        )
+
+    st.markdown("**Цена, руб/м²**")
+    st.slider(
+        "", 0, 12000,
+        (st.session_state.pr_lo, st.session_state.pr_hi),
+        step=100, key="_price_slider",
+        on_change=_on_price_slider,
+        label_visibility="collapsed",
     )
-    only_with_stock = st.checkbox("Только с остатками", value=False)
+    pc1, pc2 = st.columns(2)
+    new_lo = pc1.number_input("от ₽", 0, 12000, st.session_state.pr_lo, step=100)
+    new_hi = pc2.number_input("до ₽", 0, 12000, st.session_state.pr_hi, step=100)
+    if int(new_lo) != st.session_state.pr_lo or int(new_hi) != st.session_state.pr_hi:
+        lo_v, hi_v = int(new_lo), int(new_hi)
+        if lo_v > hi_v:
+            lo_v, hi_v = hi_v, lo_v
+        st.session_state.pr_lo = lo_v
+        st.session_state.pr_hi = hi_v
+        st.session_state["_price_slider"] = (lo_v, hi_v)
+        st.rerun()
+    price_range = (st.session_state.pr_lo, st.session_state.pr_hi)
+
+    st.markdown("**Макс. скидка, %**")
+    st.slider(
+        "", 0, 100, st.session_state.disc_max,
+        step=5, key="_disc_slider",
+        on_change=_on_disc_slider,
+        label_visibility="collapsed",
+        help="Исключить товары со скидкой выше указанного. Товары без скидки всегда включаются.",
+    )
+    new_disc = st.number_input("значение, %", 0, 100, st.session_state.disc_max, step=5)
+    if int(new_disc) != st.session_state.disc_max:
+        st.session_state.disc_max = int(new_disc)
+        st.session_state["_disc_slider"] = int(new_disc)
+        st.rerun()
+    max_discount = st.session_state.disc_max
+
+    only_with_stock = st.checkbox(
+        "Только с остатками",
+        value=False,
+        help="Анализируются только DIY-сети: Lemana PRO, OBI, Petrovich",
+    )
 
     st.divider()
     st.caption(f"КЕРАМИН выделен красным на всех графиках")
@@ -155,6 +228,22 @@ def weighted_avg_price(group: pd.DataFrame) -> float:
     if len(g) == 0 or g["total_stock"].sum() == 0:
         return group["price"].mean()
     return (g["price"] * g["total_stock"]).sum() / g["total_stock"].sum()
+
+# ─── ХЕЛПЕР: экспорт в Excel ────────────────────────────────────────────────
+
+def to_excel(data: pd.DataFrame) -> bytes:
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        data.to_excel(writer, index=False, sheet_name="Данные")
+    return buf.getvalue()
+
+def download_button(data: pd.DataFrame, filename: str, label: str = "Скачать Excel"):
+    st.download_button(
+        label=label,
+        data=to_excel(data),
+        file_name=filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 # ─── ТАБЫ ────────────────────────────────────────────────────────────────────
 
@@ -234,16 +323,16 @@ with tab1:
     with col_f:
         top_n = st.slider("Топ-N брендов", 5, 30, 15, key="top_n_brands")
         tb = (
-            filtered.groupby("brand")
+            filtered.groupby("brand_country")
             .agg(count=("name", "count"), avg_price=("price", "mean"))
             .sort_values("count", ascending=False).head(top_n).reset_index()
         )
-        tb["color"] = tb["brand"].apply(lambda x: COLOR_KERAMIN if x == KERAMIN_BRAND else COLOR_MARKET)
+        tb["color"] = tb["brand_country"].apply(lambda x: COLOR_KERAMIN if x.startswith(KERAMIN_BRAND) else COLOR_MARKET)
         fig6 = px.bar(
-            tb, x="brand", y="count", color="color",
+            tb, x="brand_country", y="count", color="color",
             color_discrete_map="identity",
             title=f"Топ-{top_n} брендов по количеству позиций",
-            labels={"brand": "Бренд", "count": "Позиций"},
+            labels={"brand_country": "Бренд (страна)", "count": "Позиций"},
         )
         fig6.update_xaxes(tickangle=45)
         fig6.update_layout(showlegend=False)
@@ -352,8 +441,9 @@ with tab2:
                          "primary_color","price","store","availability","url"]].copy()
         kd = kd.merge(market_med_fmt, on="format", how="left")
         kd["vs_рынок_%"] = ((kd["price"] - kd["медиана_рынка"]) / kd["медиана_рынка"] * 100).round(1)
+        kd_out = kd.sort_values("vs_рынок_%").reset_index(drop=True)
         st.dataframe(
-            kd.sort_values("vs_рынок_%").reset_index(drop=True),
+            kd_out,
             use_container_width=True,
             column_config={
                 "url": st.column_config.LinkColumn("Ссылка"),
@@ -362,6 +452,7 @@ with tab2:
                 "vs_рынок_%": st.column_config.NumberColumn("vs рынок, %", format="%.1f%%"),
             },
         )
+        download_button(kd_out, "keramin_vs_market.xlsx", "Скачать Excel")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ТАБ 3 — СРЕДНЕВЗВЕШЕННАЯ ЦЕНА
@@ -420,19 +511,19 @@ with tab3:
 
         st.subheader("По брендам (топ-20)")
         wa_brand = (
-            df_sw.groupby("brand")
+            df_sw.groupby("brand_country")
             .apply(weighted_avg_price).reset_index()
         )
-        wa_brand.columns = ["brand", "weighted_price"]
+        wa_brand.columns = ["brand_country", "weighted_price"]
         wa_brand = wa_brand.sort_values("weighted_price", ascending=False).head(20)
-        wa_brand["color"] = wa_brand["brand"].apply(
-            lambda x: COLOR_KERAMIN if x == KERAMIN_BRAND else COLOR_MARKET
+        wa_brand["color"] = wa_brand["brand_country"].apply(
+            lambda x: COLOR_KERAMIN if x.startswith(KERAMIN_BRAND) else COLOR_MARKET
         )
         fig3 = px.bar(
-            wa_brand, x="brand", y="weighted_price",
+            wa_brand, x="brand_country", y="weighted_price",
             color="color", color_discrete_map="identity",
             title="Средневзвешенная цена по брендам",
-            labels={"brand": "Бренд", "weighted_price": "Ср/взв цена, руб/м²"},
+            labels={"brand_country": "Бренд (страна)", "weighted_price": "Ср/взв цена, руб/м²"},
         )
         fig3.update_xaxes(tickangle=45)
         fig3.update_layout(showlegend=False)
@@ -498,18 +589,18 @@ with tab4:
         col_a, col_b = st.columns(2)
         with col_a:
             tbb = (
-                df_thr.groupby("brand")
+                df_thr.groupby("brand_country")
                 .agg(count=("name", "count"), avg_discount=("discount", "mean"))
                 .sort_values("count", ascending=False).head(15).reset_index()
             )
-            tbb["color"] = tbb["brand"].apply(
-                lambda x: COLOR_KERAMIN if x == KERAMIN_BRAND else COLOR_MARKET
+            tbb["color"] = tbb["brand_country"].apply(
+                lambda x: COLOR_KERAMIN if x.startswith(KERAMIN_BRAND) else COLOR_MARKET
             )
             fig = px.bar(
-                tbb, x="brand", y="count", color="color",
+                tbb, x="brand_country", y="count", color="color",
                 color_discrete_map="identity",
                 title="Топ брендов по скидочным позициям",
-                labels={"brand": "Бренд", "count": "Позиций"},
+                labels={"brand_country": "Бренд (страна)", "count": "Позиций"},
             )
             fig.update_xaxes(tickangle=45)
             fig.update_layout(showlegend=False)
@@ -531,11 +622,12 @@ with tab4:
             st.plotly_chart(fig2, use_container_width=True)
 
         st.subheader("Детальный список")
-        TCOLS = ["Группа", "brand", "name", "format", "material", "surface_type",
+        TCOLS = ["Группа", "brand_country", "name", "format", "material", "surface_type",
                  "primary_design", "price", "discount", "total_stock", "store", "url"]
         tcols = [c for c in TCOLS if c in df_thr.columns]
+        thr_out = df_thr[tcols].sort_values("discount", ascending=False).reset_index(drop=True)
         st.dataframe(
-            df_thr[tcols].sort_values("discount", ascending=False).reset_index(drop=True),
+            thr_out,
             use_container_width=True,
             column_config={
                 "url": st.column_config.LinkColumn("Ссылка"),
@@ -544,6 +636,7 @@ with tab4:
                 "total_stock": st.column_config.NumberColumn("Остаток м²"),
             },
         )
+        download_button(thr_out, "discount_threats.xlsx", "Скачать Excel")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ТАБ 5 — ПОИСК АНАЛОГОВ
@@ -557,11 +650,29 @@ with tab5:
     with c1:
         a_format = st.selectbox("Формат *", [""] + sorted(df["format"].dropna().unique()))
     with c2:
-        a_surface = st.multiselect("Тип поверхности", sorted(df["surface_type"].dropna().unique()))
+        a_material = st.multiselect(
+            "Материал",
+            sorted(df["material"].dropna().unique()),
+            default=sorted(df["material"].dropna().unique()),
+        )
     with c3:
         a_design = st.multiselect("Дизайн", sorted(df["primary_design"].dropna().unique()))
     with c4:
         a_color = st.multiselect("Цвет", sorted(df["primary_color"].dropna().unique()))
+
+    c4, c5 = st.columns(2)
+    with c4:
+        a_surface_finish = st.multiselect(
+            "Тип поверхности (узкий)",
+            sorted(df["surface_finish"].dropna().replace("", pd.NA).dropna().unique()),
+            help="Полированный / Лаппатированный / Не полированный",
+        )
+    with c5:
+        a_surface_type = st.multiselect(
+            "Тип поверхности (широкий)",
+            sorted(df["surface_type"].dropna().unique()),
+            help="Более детальная классификация: Матовая, Глянцевая, Сатинированная и др.",
+        )
 
     a_price = st.slider(
         "Диапазон цены аналогов, руб/м²",
@@ -573,8 +684,12 @@ with tab5:
 
     if a_format:
         analogs = df[df["format"] == a_format].copy()
-        if a_surface:
-            analogs = analogs[analogs["surface_type"].isin(a_surface)]
+        if a_material:
+            analogs = analogs[analogs["material"].isin(a_material)]
+        if a_surface_finish:
+            analogs = analogs[analogs["surface_finish"].isin(a_surface_finish)]
+        if a_surface_type:
+            analogs = analogs[analogs["surface_type"].isin(a_surface_type)]
         if a_design:
             analogs = analogs[analogs["primary_design"].isin(a_design)]
         if a_color:
@@ -590,8 +705,9 @@ with tab5:
             s3.metric("Средняя",    f"{analogs['price'].mean():.0f} ₽")
             s4.metric("Макс. цена", f"{analogs['price'].max():.0f} ₽")
 
-            ACOLS = ["brand","name","format","material","surface_type","primary_design",
-                     "primary_color","price","discount","total_stock","store","availability","url"]
+            ACOLS = ["brand_country","name","format","material","surface_finish","surface_type",
+                     "primary_design","primary_color","price","discount","total_stock",
+                     "store","availability","url"]
             acols = [c for c in ACOLS if c in analogs.columns]
             analogs_out = analogs[acols].sort_values("price").reset_index(drop=True)
             analogs_out.insert(0, "КЕРАМИН", analogs_out["brand"] == KERAMIN_BRAND)
@@ -608,17 +724,10 @@ with tab5:
                 },
             )
 
-            def to_excel(data: pd.DataFrame) -> bytes:
-                buf = BytesIO()
-                with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                    data.to_excel(writer, index=False, sheet_name="Аналоги")
-                return buf.getvalue()
-
-            st.download_button(
-                label="Скачать Excel",
-                data=to_excel(analogs_out.drop(columns=["КЕРАМИН"], errors="ignore")),
-                file_name=f"analogs_{a_format}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            download_button(
+                analogs_out.drop(columns=["КЕРАМИН"], errors="ignore"),
+                f"analogs_{a_format}.xlsx",
+                "Скачать Excel",
             )
     else:
         st.info("Выберите формат для поиска аналогов")
@@ -631,12 +740,13 @@ with tab6:
     st.subheader("Все данные")
 
     DCOLS = ["name","store","price","price_unit","discount","material","format",
-             "primary_design","primary_color","surface_type","brand","country",
+             "primary_design","primary_color","surface_type","brand_country","country",
              "availability","total_stock","url"]
     dcols = [c for c in DCOLS if c in filtered.columns]
 
+    all_data_out = filtered[dcols].reset_index(drop=True)
     st.dataframe(
-        filtered[dcols].reset_index(drop=True),
+        all_data_out,
         use_container_width=True,
         column_config={
             "url": st.column_config.LinkColumn("Ссылка"),
@@ -646,3 +756,4 @@ with tab6:
         },
     )
     st.caption(f"Показано {len(filtered):,} из {len(df):,} записей")
+    download_button(all_data_out, "tiles_data.xlsx", "Скачать Excel")
