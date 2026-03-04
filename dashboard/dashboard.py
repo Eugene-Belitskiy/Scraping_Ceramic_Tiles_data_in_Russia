@@ -106,6 +106,7 @@ with st.sidebar:
         if st.checkbox(f"{s}  ({store_counts.get(s, 0):,})", value=True, key=f"store_{s}")
     ]
 
+    st.divider()
     all_formats_list = sorted(df["format"].dropna().unique())
     key_formats_only = st.checkbox("Только ключевые форматы", value=True)
 
@@ -148,6 +149,11 @@ with st.sidebar:
         "Дизайн",
         options=sorted(df["primary_design"].dropna().unique()),
         placeholder="Все дизайны",
+    )
+    colors = st.multiselect(
+        "Цвет",
+        options=sorted(df["primary_color"].dropna().replace("", pd.NA).dropna().unique()),
+        placeholder="Все цвета",
     )
 
     st.markdown("**Страна производства**")
@@ -237,6 +243,8 @@ if surface_finishes:
     filtered = filtered[filtered["surface_finish"].isin(surface_finishes)]
 if designs:
     filtered = filtered[filtered["primary_design"].isin(designs)]
+if colors:
+    filtered = filtered[filtered["primary_color"].isin(colors)]
 if countries:
     filtered = filtered[filtered["country"].isin(countries)]
 
