@@ -31,10 +31,11 @@ MATERIAL_FORMATS = {
     "Керамогранит": ["120x60", "60x60", "60x30", "40x40", "30x30"],
     "Клинкер":      ["40x40", "30x30", "25x5"],
 }
-RUSSIA_PREMIUM_BRANDS = ["KERAMA MARAZZI", "ITALON", "ESTIMA"]
+RUSSIA_PREMIUM_BRANDS  = ["KERAMA", "ITALON", "ESTIMA"]
 CENTRAL_ASIA_COUNTRIES = ["Узбекистан", "Казахстан", "Кыргызстан"]
+EUROPE_COUNTRIES       = ["Польша", "Испания", "Италия"]
 COMP_ORDER  = ["КЕРАМИН", "Россия (премиум)", "Россия (прочие)",
-               "Индия", "Китай", "Средняя Азия", "Прочие"]
+               "Индия", "Китай", "Средняя Азия", "Европа", "Прочие"]
 COMP_COLORS = {
     "КЕРАМИН":           "#E63946",
     "Россия (премиум)":  "#F4A261",
@@ -42,6 +43,7 @@ COMP_COLORS = {
     "Индия":             "#E9C46A",
     "Китай":             "#2A9D8F",
     "Средняя Азия":      "#9B5DE5",
+    "Европа":            "#06D6A0",
     "Прочие":            "#CCCCCC",
 }
 
@@ -121,6 +123,8 @@ def _assign_comp_group(brand: str, country: str) -> str:
         return "Китай"
     if country in CENTRAL_ASIA_COUNTRIES:
         return "Средняя Азия"
+    if country in EUROPE_COUNTRIES:
+        return "Европа"
     return "Прочие"
 
 def _reset_filters():
@@ -482,8 +486,10 @@ with tab2:
 
         st.divider()
 
-        top_fmt = filtered["format"].value_counts().head(12).index.tolist()
-        dp = filtered[filtered["format"].isin(top_fmt)].copy()
+        # Конкурентный график строится по полному датасету (df),
+        # только с фильтром по форматам — чтобы все группы были видны
+        active_fmts = sorted(filtered["format"].dropna().unique())
+        dp = df[df["format"].isin(active_fmts) & df["price"].notna()].copy()
         dp["Группа"] = dp.apply(
             lambda r: _assign_comp_group(r["brand"], r["country"]), axis=1
         )
@@ -491,7 +497,7 @@ with tab2:
             dp, x="format", y="price", color="Группа",
             color_discrete_map=COMP_COLORS,
             category_orders={"Группа": COMP_ORDER},
-            title="Цены КЕРАМИН vs конкурентные группы по форматам",
+            title="Цены КЕРАМИН vs конкурентные группы по форматам (полный рынок)",
             labels={"format": "Формат", "price": "Цена, руб/м²"},
         )
         fig.update_xaxes(tickangle=45)
