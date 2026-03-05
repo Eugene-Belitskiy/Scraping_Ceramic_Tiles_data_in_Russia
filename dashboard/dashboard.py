@@ -648,49 +648,6 @@ with tab2:
         st.caption("Нажмите на группу — увидите бренды внутри")
         st.plotly_chart(fig_tree, use_container_width=True)
 
-        st.subheader("Сравнение бренд-стран с КЕРАМИН")
-        keramin_avg = dp[dp["Группа"] == "КЕРАМИН"]["price"].mean()
-
-        bc_detail = (
-            dp.groupby(["Группа", "brand_country"])
-            .agg(
-                SKU=("price", "count"),
-                Средняя_цена=("price", "mean"),
-            )
-            .round({"Средняя_цена": 0})
-            .reset_index()
-        )
-        bc_detail["Средняя_цена"] = bc_detail["Средняя_цена"].astype(int)
-        bc_detail["vs КЕРАМИН, %"] = (
-            (bc_detail["Средняя_цена"] - keramin_avg) / keramin_avg * 100
-        ).round(1)
-
-        # Сортировка по порядку COMP_ORDER → внутри по цене
-        grp_order = {g: i for i, g in enumerate(COMP_ORDER)}
-        bc_detail["_ord"] = bc_detail["Группа"].map(grp_order)
-        bc_detail = (
-            bc_detail.sort_values(["_ord", "Средняя_цена"])
-            .drop(columns=["_ord"])
-            .reset_index(drop=True)
-        )
-
-        sku_max = int(bc_detail["SKU"].max())
-        st.dataframe(
-            bc_detail,
-            use_container_width=True,
-            column_config={
-                "Группа":        st.column_config.TextColumn("Группа"),
-                "brand_country": st.column_config.TextColumn("Бренд-страна"),
-                "SKU": st.column_config.ProgressColumn(
-                    "SKU", min_value=0, max_value=sku_max, format="%d"
-                ),
-                "Средняя_цена":  st.column_config.NumberColumn("Средняя цена", format="%d ₽"),
-                "vs КЕРАМИН, %": st.column_config.NumberColumn("vs КЕРАМИН, %", format="%.1f%%"),
-            },
-        )
-        download_button(bc_detail, "keramin_vs_brands.xlsx", "Скачать Excel")
-
-        st.divider()
         st.subheader("Позиционирование конкурентов по материалу и формату")
 
         threshold = st.slider(
