@@ -1074,27 +1074,43 @@ with tab7:
 
         fig_vio = go.Figure()
         for group in COMP_ORDER:
-            subset = dp7_f[dp7_f["Группа"] == group]
+            subset = dp7_f[dp7_f["Группа"] == group].copy()
             if len(subset) < 3:
                 continue
             is_keramin = group == "КЕРАМИН"
+            cd = subset[["name", "primary_design", "primary_color"]].fillna("—").values
             fig_vio.add_trace(go.Violin(
                 y=subset["price"],
                 name=group,
                 line_color=COMP_COLORS[group],
                 fillcolor=COMP_COLORS[group],
                 opacity=0.8 if is_keramin else 0.45,
-                points="all" if is_keramin else False,
+                points="all",
+                pointpos=0,
+                jitter=0.25,
+                marker=dict(
+                    size=5 if is_keramin else 3,
+                    opacity=0.9 if is_keramin else 0.5,
+                    color=COMP_COLORS[group],
+                ),
                 meanline_visible=True,
                 box_visible=True,
                 spanmode="soft",
+                customdata=cd,
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Цена: %{y:.0f} ₽<br>"
+                    "Дизайн: %{customdata[1]}<br>"
+                    "Цвет: %{customdata[2]}"
+                    "<extra></extra>"
+                ),
             ))
         fig_vio.update_layout(
             yaxis_title="Цена, руб/м²",
             xaxis_title="Конкурентная группа",
             violingap=0.15,
             violinmode="overlay",
-            height=500,
+            height=550,
             showlegend=False,
         )
         st.plotly_chart(fig_vio, use_container_width=True)
