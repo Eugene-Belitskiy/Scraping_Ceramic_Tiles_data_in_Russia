@@ -1131,6 +1131,78 @@ with tab7:
         )
         st.plotly_chart(fig_vio, use_container_width=True)
 
+        # ── 1b. Violin + пузырьки бренд-стран ───────────────────────────────
+        st.markdown("### Плотность цен + позиции бренд-стран")
+        st.caption(
+            "Та же форма плотности, но точки заменены на агрегированные пузырьки "
+            "бренд-стран. Размер пузырька = количество SKU."
+        )
+
+        bc_agg7 = (
+            dp7_f.groupby(["Группа", "brand_country"])
+            .agg(avg_price=("price", "mean"), SKU=("price", "count"))
+            .round({"avg_price": 0})
+            .reset_index()
+        )
+        bc_agg7["avg_price"] = bc_agg7["avg_price"].astype(int)
+        sku_max7 = int(bc_agg7["SKU"].max())
+        sizeref7 = 2.0 * sku_max7 / (38 ** 2)
+
+        fig_vio2 = go.Figure()
+        # Violin shapes (только форма, без точек)
+        for group in COMP_ORDER:
+            subset = dp7_f[dp7_f["Группа"] == group]
+            if len(subset) < 3:
+                continue
+            fig_vio2.add_trace(go.Violin(
+                y=subset["price"],
+                name=group,
+                line_color=COMP_COLORS[group],
+                fillcolor=COMP_COLORS[group],
+                opacity=0.3,
+                points=False,
+                meanline_visible=True,
+                box_visible=True,
+                spanmode="soft",
+                showlegend=False,
+            ))
+        # Пузырьки бренд-стран
+        for group in COMP_ORDER:
+            subset_bc = bc_agg7[bc_agg7["Группа"] == group]
+            if len(subset_bc) == 0:
+                continue
+            fig_vio2.add_trace(go.Scatter(
+                x=[group] * len(subset_bc),
+                y=subset_bc["avg_price"],
+                mode="markers",
+                name=group,
+                marker=dict(
+                    size=subset_bc["SKU"].tolist(),
+                    sizemode="area",
+                    sizeref=sizeref7,
+                    sizemin=6,
+                    color=COMP_COLORS[group],
+                    opacity=0.85,
+                    line=dict(color="white", width=1.5),
+                ),
+                customdata=subset_bc[["brand_country", "avg_price", "SKU"]].values,
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Средняя цена: %{customdata[1]} ₽<br>"
+                    "SKU: %{customdata[2]:.0f}"
+                    "<extra></extra>"
+                ),
+                showlegend=False,
+            ))
+        fig_vio2.update_layout(
+            yaxis_title="Цена, руб/м²",
+            xaxis_title="Конкурентная группа",
+            violingap=0.15,
+            violinmode="overlay",
+            height=550,
+        )
+        st.plotly_chart(fig_vio2, use_container_width=True)
+
         st.divider()
 
         # ── 2. Тепловая карта плотности: формат × ценовой диапазон ──────────
